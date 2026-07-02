@@ -352,7 +352,8 @@ TESTS_STRESS := $(srcroot)test/stress/batch_alloc.c \
 	$(srcroot)test/stress/hookbench.c \
 	$(srcroot)test/stress/large_microbench.c \
 	$(srcroot)test/stress/mallctl.c \
-	$(srcroot)test/stress/microbench.c
+	$(srcroot)test/stress/microbench.c \
+	$(srcroot)test/stress/tsd_reentrant.c
 ifeq (@enable_cxx@, 1)
 TESTS_STRESS_CPP := $(srcroot)test/stress/cpp/microbench.cpp
 else
