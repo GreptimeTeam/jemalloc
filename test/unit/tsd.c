@@ -135,6 +135,71 @@ TEST_BEGIN(test_tsd_reincarnation) {
 }
 TEST_END
 
+static bool tsd_bootstrap_reentrant_hook_ran;
+static unsigned tsd_bootstrap_reentrant_hook_runs;
+
+static void
+tsd_bootstrap_reentrant_hook(void) {
+	tsd_bootstrap_reentrant_hook_ran = true;
+	tsd_bootstrap_reentrant_hook_runs++;
+	test_hooks_tsd_bootstrap_hook = NULL;
+
+	void *p = malloc(16);
+	expect_ptr_not_null(p, "Unexpected recursive malloc() failure");
+	free(p);
+}
+
+static void *
+thd_start_reentrant_tsd_bootstrap(void *arg) {
+	(void)arg;
+
+	test_hooks_tsd_bootstrap_hook = tsd_bootstrap_reentrant_hook;
+	void *p = malloc(1);
+	expect_ptr_not_null(p, "Unexpected malloc() failure");
+	free(p);
+	test_hooks_tsd_bootstrap_hook = NULL;
+
+	expect_true(tsd_bootstrap_reentrant_hook_ran,
+	    "TSD bootstrap hook should have executed");
+	return NULL;
+}
+
+static void *
+thd_start_reentrant_tsd_bootstrap_minimal(void *arg) {
+	(void)arg;
+
+	tsd_t *tsd = tsd_fetch_min();
+	expect_u_eq(tsd_state_get(tsd), tsd_state_minimal_initialized,
+	    "TSD should be minimal initialized");
+
+	test_hooks_tsd_bootstrap_hook = tsd_bootstrap_reentrant_hook;
+	void *p = malloc(1);
+	expect_ptr_not_null(p, "Unexpected malloc() failure");
+	free(p);
+	test_hooks_tsd_bootstrap_hook = NULL;
+
+	expect_true(tsd_bootstrap_reentrant_hook_ran,
+	    "TSD bootstrap hook should have executed");
+	return NULL;
+}
+
+TEST_BEGIN(test_tsd_reentrant_bootstrap) {
+	thd_t thd;
+
+	tsd_bootstrap_reentrant_hook_ran = false;
+	tsd_bootstrap_reentrant_hook_runs = 0;
+	thd_create(&thd, thd_start_reentrant_tsd_bootstrap, NULL);
+	thd_join(thd, NULL);
+
+	tsd_bootstrap_reentrant_hook_ran = false;
+	thd_create(&thd, thd_start_reentrant_tsd_bootstrap_minimal, NULL);
+	thd_join(thd, NULL);
+
+	expect_u_eq(tsd_bootstrap_reentrant_hook_runs, 2,
+	    "TSD bootstrap hook should have executed once per case");
+}
+TEST_END
+
 static void *
 thd_start_dalloc_only(void *arg) {
 	void **ptrs = (void **)arg;
@@ -322,5 +387,5 @@ main(void) {
 
 	return test_no_reentrancy(test_tsd_main_thread, test_tsd_sub_thread,
 	    test_tsd_sub_thread_dalloc_only, test_tsd_reincarnation,
-	    test_tsd_global_slow);
+	    test_tsd_reentrant_bootstrap, test_tsd_global_slow);
 }
